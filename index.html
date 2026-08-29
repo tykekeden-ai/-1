@@ -2,122 +2,138 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<title>ハイブリッド時計 Pro</title>
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>多機能時計フル版（全世界対応）</title>
 <style>
-body { margin:0; font-family:sans-serif; background:linear-gradient(to bottom,#0f1724,#071124); color:white; display:flex; flex-direction:column; align-items:center; justify-content:flex-start; min-height:100vh; padding:10px;}
-h2 { margin:0 0 5px 0; }
-.clock-container { display:flex; flex-direction:column; align-items:center; margin-bottom:20px; }
-#digital { font-size:2.5em; margin-bottom:10px; }
-canvas { background:#111; border-radius:50%; }
-button,input,textarea { font-size:1em; margin:2px; padding:4px 6px; border-radius:4px; border:1px solid rgba(255,255,255,0.2); background:rgba(255,255,255,0.05); color:white; }
-button:hover,input:hover,textarea:hover { background:rgba(255,255,255,0.1); }
-.world-clock, .alarms, .timers { width:100%; max-width:400px; margin-bottom:20px; }
+body { font-family:sans-serif; text-align:center; background:#f0f0f0; margin:0; padding:20px; }
+h1 { margin-bottom:10px; }
+.clock-section, .function-section { margin-bottom:30px; }
+#analogClock { width:200px; height:200px; background:white; border-radius:50%; border:4px solid #333; margin:0 auto 10px; position:relative; }
+.hand { position:absolute; width:50%; height:2px; background:#333; top:50%; transform-origin:100%; transform:rotate(90deg); }
+#hour { height:4px; background:#333; }
+#minute { height:3px; background:#555; }
+#second { height:2px; background:red; }
+#digitalClock { font-size:2em; margin-bottom:10px; }
+#worldClockContainer div { margin:3px 0; }
+.functions { display:flex; justify-content:center; gap:20px; flex-wrap:wrap; }
+.section { background:white; padding:15px; border-radius:10px; box-shadow:1px 1px 5px rgba(0,0,0,0.2); min-width:180px; }
+button { margin:5px; padding:8px 15px; }
+#lapTimes { max-height:100px; overflow-y:auto; text-align:left; margin-top:5px; font-size:0.9em; }
 </style>
 </head>
 <body>
 
-<div class="clock-container">
-  <canvas id="analog" width="200" height="200"></canvas>
-  <div id="digital">--:--:--</div>
+<h1>🕒 多機能時計フル版</h1>
+
+<div class="clock-section">
+  <div id="analogClock">
+    <div id="hour" class="hand"></div>
+    <div id="minute" class="hand"></div>
+    <div id="second" class="hand"></div>
+  </div>
+  <div id="digitalClock">--:--:--</div>
+
+  <h3>世界時計（都市名＋タイムゾーン入力で追加）</h3>
+  <div id="worldClockContainer"></div>
+  <input type="text" id="cityName" placeholder="都市名">
+  <input type="text" id="timeZone" placeholder="例: Asia/Tokyo">
+  <button onclick="addWorldClock()">➕追加</button>
 </div>
 
-<div class="world-clock">
-  <h2>世界時計</h2>
-  <div id="world-list"></div>
+<div class="function-section functions">
+
+  <div class="section">
+    <h3>ストップウォッチ</h3>
+    <div id="stopwatch">00:00.0</div>
+    <button onclick="startStopwatch()">▶開始</button>
+    <button onclick="stopStopwatch()">⏸停止</button>
+    <button onclick="resetStopwatch()">🔄リセット</button>
+    <button onclick="lapStopwatch()">🏁ラップ</button>
+    <div id="lapTimes"></div>
+  </div>
+
+  <div class="section">
+    <h3>タイマー</h3>
+    <input type="number" id="timerMinutes" value="1" min="1"> 分
+    <button onclick="startTimer()">▶開始</button>
+    <div id="timerDisplay">00:00</div>
+  </div>
+
+  <div class="section">
+    <h3>アラーム</h3>
+    <input type="time" id="alarmTime">
+    <button onclick="setAlarm()">⏰セット</button>
+    <div id="alarmStatus">未設定</div>
+  </div>
+
+  <div class="section">
+    <h3>天気情報</h3>
+    <input type="text" id="weatherCity" placeholder="都市名" value="Tokyo">
+    <button onclick="getWeather()">🌤️取得</button>
+    <div id="weather">--</div>
+  </div>
+
 </div>
 
-<div class="alarms">
-  <h2>アラーム</h2>
-  <div id="alarm-list"></div>
-</div>
-
-<div class="timers">
-  <h2>タイマー</h2>
-  <div id="timer-list"></div>
-</div>
+<audio id="beep">
+  <source src="https://actions.google.com/sounds/v1/alarms/alarm_clock.ogg" type="audio/ogg">
+</audio>
 
 <script>
-// デジタル＋アナログ時計
-const canvas = document.getElementById('analog');
-const ctx = canvas.getContext('2d');
-const r = canvas.width/2;
-function drawClock(){
-  const now = new Date();
-  const h = now.getHours(), m=now.getMinutes(), s=now.getSeconds();
-  // デジタル
-  document.getElementById('digital').textContent = 
-    String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
-  // アナログ
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  ctx.translate(r,r);
-  ctx.beginPath(); ctx.arc(0,0,r-5,0,2*Math.PI); ctx.strokeStyle='white'; ctx.lineWidth=2; ctx.stroke();
-  function hand(angle,length,width,color){ ctx.rotate(angle); ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(0,-length); ctx.lineWidth=width; ctx.strokeStyle=color; ctx.stroke(); ctx.rotate(-angle);}
-  hand((h%12+m/60)*Math.PI/6,50,6,'white');
-  hand((m+s/60)*Math.PI/30,70,4,'white');
-  hand(s*Math.PI/30,80,2,'red');
-  ctx.translate(-r,-r);
-}
-setInterval(drawClock,1000); drawClock();
+const API_KEY = "bb6ff605af6210f81b7d80ebd595b1f0";
+let ntpOffset = 0;
+let worldClocks = [];
 
-// 世界時計（例: 東京, ロサンゼルス, ロンドン）
-const zones=['Asia/Tokyo','America/Los_Angeles','Europe/London'];
-function updateWorldClocks(){
-  const container=document.getElementById('world-list');
-  container.innerHTML='';
-  const now=new Date();
-  zones.forEach(tz=>{
-    const fmt=new Intl.DateTimeFormat('ja-JP',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false,timeZone:tz});
-    const div=document.createElement('div'); div.textContent=tz+' '+fmt.format(now); container.appendChild(div);
-  });
-}
-setInterval(updateWorldClocks,1000); updateWorldClocks();
+function updateClock() {
+  let now = new Date(Date.now()+ntpOffset);
+  document.getElementById("digitalClock").textContent = now.toLocaleTimeString();
+  let hours = now.getHours()%12, minutes=now.getMinutes(), seconds=now.getSeconds();
+  document.getElementById("hour").style.transform=\`rotate(\${hours*30+minutes/2}deg)\`;
+  document.getElementById("minute").style.transform=\`rotate(\${minutes*6}deg)\`;
+  document.getElementById("second").style.transform=\`rotate(\${seconds*6}deg)\`;
 
-// アラーム（簡易）
-let alarms=[]; // {time:'HH:MM',label:''}
-function checkAlarms(){
-  const now=new Date();
-  const hh=String(now.getHours()).padStart(2,'0'), mm=String(now.getMinutes()).padStart(2,'0');
-  alarms.forEach(a=>{
-    if(!a.fired && a.time===`${hh}:${mm}`){ alert('アラーム: '+(a.label||a.time)); a.fired=true; }
+  worldClocks.forEach(c=>{
+    const time = now.toLocaleTimeString("en-US",{timeZone:c.zone});
+    c.div.textContent = \`\${c.name}: \${time}\`;
   });
 }
-setInterval(checkAlarms,1000);
-function addAlarm(time,label){ alarms.push({time,label,fired:false}); renderAlarms(); }
-function renderAlarms(){
-  const container=document.getElementById('alarm-list'); container.innerHTML='';
-  alarms.forEach((a,i)=>{
-    const div=document.createElement('div'); div.textContent=a.time+' '+(a.label||'');
-    const btn=document.createElement('button'); btn.textContent='削除'; btn.onclick=()=>{alarms.splice(i,1); renderAlarms();};
-    div.appendChild(btn); container.appendChild(div);
-  });
-}
-addAlarm('07:30','朝'); //例
+setInterval(updateClock,1000);
 
-// タイマー（簡易）
-let timers=[]; // {msLeft,running,label}
-function tickTimers(){
-  timers.forEach(t=>{
-    if(t.running && t.msLeft>0){ t.msLeft-=1000; if(t.msLeft<=0) alert('タイマー終了: '+t.label); }
-  });
-  renderTimers();
+function addWorldClock(){
+  const name=document.getElementById("cityName").value.trim();
+  const zone=document.getElementById("timeZone").value.trim();
+  if(!name||!zone){ alert("都市名とタイムゾーンを入力"); return; }
+  const div=document.createElement("div");
+  document.getElementById("worldClockContainer").appendChild(div);
+  worldClocks.push({name,zone,div});
+  document.getElementById("cityName").value="";
+  document.getElementById("timeZone").value="";
 }
-setInterval(tickTimers,1000);
-function addTimer(mins,label){ timers.push({msLeft:mins*60*1000,running:true,label}); renderTimers();}
-function renderTimers(){
-  const container=document.getElementById('timer-list'); container.innerHTML='';
-  timers.forEach((t,i)=>{
-    const div=document.createElement('div');
-    const h=Math.floor(t.msLeft/3600000), m=Math.floor(t.msLeft/60000)%60, s=Math.floor(t.msLeft/1000)%60;
-    div.textContent=(h>0?h+'h ':'')+m+'m '+s+'s '+t.label;
-    const btn=document.createElement('button'); btn.textContent=t.running?'一時停止':'再開';
-    btn.onclick=()=>{ t.running=!t.running; renderTimers(); };
-    const btn2=document.createElement('button'); btn2.textContent='リセット'; btn2.onclick=()=>{ t.msLeft=0; renderTimers(); };
-    div.appendChild(btn); div.appendChild(btn2); container.appendChild(div);
-  });
+
+let swInterval, swStart, swElapsed=0;
+function startStopwatch(){ if(swInterval) return; swStart=Date.now()-swElapsed; swInterval=setInterval(()=>{ swElapsed=Date.now()-swStart; let s=(swElapsed/1000).toFixed(1); let m=Math.floor(s/60); document.getElementById("stopwatch").textContent=String(m).padStart(2,"0")+":"+String((s%60).toFixed(1)).padStart(4,"0"); },100);}
+function stopStopwatch(){ clearInterval(swInterval); swInterval=null; }
+function resetStopwatch(){ stopStopwatch(); swElapsed=0; document.getElementById("stopwatch").textContent="00:00.0"; document.getElementById("lapTimes").innerHTML=""; }
+function lapStopwatch(){ let lap=document.getElementById("stopwatch").textContent; let lapDiv=document.createElement("div"); lapDiv.textContent=lap; document.getElementById("lapTimes").appendChild(lapDiv); }
+
+let timerInterval, timerRemaining;
+function startTimer(){ clearInterval(timerInterval); let minutes=parseInt(document.getElementById("timerMinutes").value); timerRemaining=minutes*60; timerInterval=setInterval(()=>{ timerRemaining--; let m=Math.floor(timerRemaining/60); let s=timerRemaining%60; document.getElementById("timerDisplay").textContent=String(m).padStart(2,"0")+":"+String(s).padStart(2,"0"); if(timerRemaining<=0){ clearInterval(timerInterval); document.getElementById("beep").play(); alert("タイマー終了！"); } },1000); }
+
+let alarms=[];
+function setAlarm(){ let input=document.getElementById("alarmTime").value; if(!input){alert("時間を設定してください"); return;} alarms.push(input); document.getElementById("alarmStatus").textContent="設定: "+alarms.join(", "); }
+setInterval(()=>{ if(alarms.length>0){ let now=new Date(Date.now()+ntpOffset); let h=String(now.getHours()).padStart(2,"0"); let m=String(now.getMinutes()).padStart(2,"0"); alarms=alarms.filter(a=>{ if(\`\${h}:\${m}\`===a){ document.getElementById("beep").play(); alert("アラーム！ "+a); return false; } return true; }); document.getElementById("alarmStatus").textContent=alarms.length>0?"設定: "+alarms.join(", "):"未設定"; } },1000);
+
+async function getWeather(){
+  const city=document.getElementById("weatherCity").value;
+  try{
+    const geoRes=await fetch(\`https://api.openweathermap.org/geo/1.0/direct?q=\${city}&limit=1&appid=\${API_KEY}\`);
+    const geoData=await geoRes.json();
+    if(!geoData[0]){ document.getElementById("weather").textContent="都市が見つかりません"; return; }
+    const lat=geoData[0].lat, lon=geoData[0].lon;
+    const weatherRes=await fetch(\`https://api.openweathermap.org/data/2.5/weather?lat=\${lat}&lon=\${lon}&appid=\${API_KEY}&units=metric&lang=ja\`);
+    const weatherData=await weatherRes.json();
+    document.getElementById("weather").textContent=\`\${weatherData.name}: \${weatherData.weather[0].description}, \${weatherData.main.temp}℃\`;
+  }catch(e){ document.getElementById("weather").textContent="取得失敗"; }
 }
-addTimer(1,'サンプル'); //1分例
 </script>
-
 </body>
 </html>
