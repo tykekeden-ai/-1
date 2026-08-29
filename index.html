@@ -1,11 +1,123 @@
-let score = 0;
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<title>ハイブリッド時計 Pro</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<style>
+body { margin:0; font-family:sans-serif; background:linear-gradient(to bottom,#0f1724,#071124); color:white; display:flex; flex-direction:column; align-items:center; justify-content:flex-start; min-height:100vh; padding:10px;}
+h2 { margin:0 0 5px 0; }
+.clock-container { display:flex; flex-direction:column; align-items:center; margin-bottom:20px; }
+#digital { font-size:2.5em; margin-bottom:10px; }
+canvas { background:#111; border-radius:50%; }
+button,input,textarea { font-size:1em; margin:2px; padding:4px 6px; border-radius:4px; border:1px solid rgba(255,255,255,0.2); background:rgba(255,255,255,0.05); color:white; }
+button:hover,input:hover,textarea:hover { background:rgba(255,255,255,0.1); }
+.world-clock, .alarms, .timers { width:100%; max-width:400px; margin-bottom:20px; }
+</style>
+</head>
+<body>
 
-function penguin() {
-  score++;
-  console.log("🐧 ペンギン発見！");
-  console.log("スコア：" + score);
+<div class="clock-container">
+  <canvas id="analog" width="200" height="200"></canvas>
+  <div id="digital">--:--:--</div>
+</div>
+
+<div class="world-clock">
+  <h2>世界時計</h2>
+  <div id="world-list"></div>
+</div>
+
+<div class="alarms">
+  <h2>アラーム</h2>
+  <div id="alarm-list"></div>
+</div>
+
+<div class="timers">
+  <h2>タイマー</h2>
+  <div id="timer-list"></div>
+</div>
+
+<script>
+// デジタル＋アナログ時計
+const canvas = document.getElementById('analog');
+const ctx = canvas.getContext('2d');
+const r = canvas.width/2;
+function drawClock(){
+  const now = new Date();
+  const h = now.getHours(), m=now.getMinutes(), s=now.getSeconds();
+  // デジタル
+  document.getElementById('digital').textContent = 
+    String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':'+String(s).padStart(2,'0');
+  // アナログ
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.translate(r,r);
+  ctx.beginPath(); ctx.arc(0,0,r-5,0,2*Math.PI); ctx.strokeStyle='white'; ctx.lineWidth=2; ctx.stroke();
+  function hand(angle,length,width,color){ ctx.rotate(angle); ctx.beginPath(); ctx.moveTo(0,0); ctx.lineTo(0,-length); ctx.lineWidth=width; ctx.strokeStyle=color; ctx.stroke(); ctx.rotate(-angle);}
+  hand((h%12+m/60)*Math.PI/6,50,6,'white');
+  hand((m+s/60)*Math.PI/30,70,4,'white');
+  hand(s*Math.PI/30,80,2,'red');
+  ctx.translate(-r,-r);
 }
+setInterval(drawClock,1000); drawClock();
 
-penguin();
-penguin();
-penguin();
+// 世界時計（例: 東京, ロサンゼルス, ロンドン）
+const zones=['Asia/Tokyo','America/Los_Angeles','Europe/London'];
+function updateWorldClocks(){
+  const container=document.getElementById('world-list');
+  container.innerHTML='';
+  const now=new Date();
+  zones.forEach(tz=>{
+    const fmt=new Intl.DateTimeFormat('ja-JP',{hour:'2-digit',minute:'2-digit',second:'2-digit',hour12:false,timeZone:tz});
+    const div=document.createElement('div'); div.textContent=tz+' '+fmt.format(now); container.appendChild(div);
+  });
+}
+setInterval(updateWorldClocks,1000); updateWorldClocks();
+
+// アラーム（簡易）
+let alarms=[]; // {time:'HH:MM',label:''}
+function checkAlarms(){
+  const now=new Date();
+  const hh=String(now.getHours()).padStart(2,'0'), mm=String(now.getMinutes()).padStart(2,'0');
+  alarms.forEach(a=>{
+    if(!a.fired && a.time===`${hh}:${mm}`){ alert('アラーム: '+(a.label||a.time)); a.fired=true; }
+  });
+}
+setInterval(checkAlarms,1000);
+function addAlarm(time,label){ alarms.push({time,label,fired:false}); renderAlarms(); }
+function renderAlarms(){
+  const container=document.getElementById('alarm-list'); container.innerHTML='';
+  alarms.forEach((a,i)=>{
+    const div=document.createElement('div'); div.textContent=a.time+' '+(a.label||'');
+    const btn=document.createElement('button'); btn.textContent='削除'; btn.onclick=()=>{alarms.splice(i,1); renderAlarms();};
+    div.appendChild(btn); container.appendChild(div);
+  });
+}
+addAlarm('07:30','朝'); //例
+
+// タイマー（簡易）
+let timers=[]; // {msLeft,running,label}
+function tickTimers(){
+  timers.forEach(t=>{
+    if(t.running && t.msLeft>0){ t.msLeft-=1000; if(t.msLeft<=0) alert('タイマー終了: '+t.label); }
+  });
+  renderTimers();
+}
+setInterval(tickTimers,1000);
+function addTimer(mins,label){ timers.push({msLeft:mins*60*1000,running:true,label}); renderTimers();}
+function renderTimers(){
+  const container=document.getElementById('timer-list'); container.innerHTML='';
+  timers.forEach((t,i)=>{
+    const div=document.createElement('div');
+    const h=Math.floor(t.msLeft/3600000), m=Math.floor(t.msLeft/60000)%60, s=Math.floor(t.msLeft/1000)%60;
+    div.textContent=(h>0?h+'h ':'')+m+'m '+s+'s '+t.label;
+    const btn=document.createElement('button'); btn.textContent=t.running?'一時停止':'再開';
+    btn.onclick=()=>{ t.running=!t.running; renderTimers(); };
+    const btn2=document.createElement('button'); btn2.textContent='リセット'; btn2.onclick=()=>{ t.msLeft=0; renderTimers(); };
+    div.appendChild(btn); div.appendChild(btn2); container.appendChild(div);
+  });
+}
+addTimer(1,'サンプル'); //1分例
+</script>
+
+</body>
+</html>
